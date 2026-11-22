@@ -20,22 +20,24 @@ body.swm_no_near .swm_near {
     -webkit-tap-highlight-color: transparent;
 }
 
-/* ST's own arrows: just left of the swipe counter, on the same line, as faint as the counter */
+/* ST's own arrows: right beside the "next" arrow, on the arrow's line and at the arrow's size.
+   Colour, strength and exact size are copied from the arrow by script, so it fits any theme. */
 #chat .mes.last_mes.swm_multi .swipeRightBlock > .swm_near {
     display: flex;
     position: absolute;
+    top: 0;
     right: 100%;
-    bottom: var(--swipeCounterMargin, 0px);
-    width: 28px;
-    height: var(--swipeCounterHeight, 20px);
-    font-size: 13px;
-    opacity: 0.3;
+    width: 36px;
+    height: 25px;
+    margin-right: 4px;
+    font-size: 18px;
+    opacity: 0.5;
     z-index: 9999;
 }
 
 #chat .mes.last_mes.swm_multi .swipeRightBlock > .swm_near:hover,
 #chat .mes.last_mes.swm_multi .swipeRightBlock > .swm_near:focus-visible {
-    opacity: 0.7;
+    opacity: 1 !important;
 }
 
 /* Swipe arrows shown as a row of buttons under the message: one more button at the end of that row */

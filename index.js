@@ -761,7 +761,7 @@ function buildSettingsSheet() {
         make('div', { class: 'swm_set_body' }, [
             make('div', { class: 'swm_set_title', text: '퍼즐 버튼 위치' }),
             check('menuButton', '메시지 메뉴(…) 안에 보이기', 'nearButton'),
-            check('nearButton', '맨 아래 답변의 스와이프 번호 옆에 보이기 (스와이프가 2개 이상일 때)', 'menuButton'),
+            check('nearButton', '맨 아래 답변의 스와이프 화살표 옆에 보이기 (스와이프가 2개 이상일 때)', 'menuButton'),
             make('div', { class: 'swm_set_title', text: 'AI로 고치기에 쓸 연결' }),
             ui.setProfile,
             make('div', { class: 'swm_set_note', text: '"이음새 다듬기"와 "한글 줄만 원문 언어로"를 누를 때만 요청을 보내요. 현재 연결은 지금 채팅에 쓰는 모델 그대로예요. 싼 모델로 돌리고 싶으면 연결 프로필을 골라요.' }),
@@ -1044,6 +1044,24 @@ function refreshNear() {
     const message = ctx().chat?.[Number(last.getAttribute('mesid'))];
     const multi = !!message && !message.is_user && !message.is_system && Array.isArray(message.swipes) && message.swipes.length > 1;
     last.classList.toggle('swm_multi', multi);
+    if (multi) matchArrow(last);
+}
+
+/**
+ * The button next to ST's own swipe arrow takes the arrow's colour, size and strength, so it looks like
+ * a third swipe control in any theme (never fainter than half, so it stays readable).
+ */
+function matchArrow(mes) {
+    const arrow = mes.querySelector('.swipeRightBlock > .swipe_right');
+    const near = mes.querySelector('.swipeRightBlock > .swm_near');
+    if (!arrow || !near) return;
+    const look = getComputedStyle(arrow);
+    const size = parseFloat(look.fontSize);
+    const height = parseFloat(look.height);
+    near.style.color = look.color;
+    near.style.opacity = String(Math.max(0.5, Number(look.opacity) || 0));
+    if (size > 0) near.style.fontSize = `${Math.round(size * 0.9)}px`;
+    if (height > 0) near.style.height = `${Math.round(height)}px`;
 }
 const refreshNearSoon = debounce(refreshNear, 150);
 
