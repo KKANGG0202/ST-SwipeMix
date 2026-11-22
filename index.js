@@ -594,6 +594,40 @@ function closeEdit() {
     if (state) drawTray();
 }
 
+/**
+ * Word-by-word difference between two texts: [{ type: 'same' | 'del' | 'add', text }].
+ * Longest common run of words; very long paragraphs are shown as one removed and one added piece.
+ */
+function wordDiff(before, after) {
+    const a = String(before).split(/(\s+)/).filter(Boolean);
+    const b = String(after).split(/(\s+)/).filter(Boolean);
+    if (a.length * b.length > 400000) return [{ type: 'del', text: before }, { type: 'add', text: after }];
+    const rows = a.length + 1;
+    const cols = b.length + 1;
+    const len = new Uint16Array(rows * cols);
+    for (let i = a.length - 1; i >= 0; i--) {
+        for (let j = b.length - 1; j >= 0; j--) {
+            len[i * cols + j] = a[i] === b[j] ? len[(i + 1) * cols + j + 1] + 1 : Math.max(len[(i + 1) * cols + j], len[i * cols + j + 1]);
+        }
+    }
+    const out = [];
+    const push = (type, text) => {
+        const last = out[out.length - 1];
+        if (last && last.type === type) last.text += text;
+        else out.push({ type, text });
+    };
+    let i = 0;
+    let j = 0;
+    while (i < a.length && j < b.length) {
+        if (a[i] === b[j]) { push('same', a[i]); i++; j++; }
+        else if (len[(i + 1) * cols + j] >= len[i * cols + j + 1]) push('del', a[i++]);
+        else push('add', b[j++]);
+    }
+    while (i < a.length) push('del', a[i++]);
+    while (j < b.length) push('add', b[j++]);
+    return out;
+}
+
 function fitHeight(area) {
     area.style.height = 'auto';
     area.style.height = `${area.scrollHeight + 2}px`;
@@ -615,6 +649,8 @@ function drawEditList() {
         const mark = make('span', { class: 'swm_edit_mark' });
         const refLabel = make('span', { class: 'swm_edit_ref_label' });
         const ref = para.tr ? make('div', { class: 'swm_edit_ref' }, [refLabel, make('span', { text: para.tr })]) : null;
+        // what changed against the picked paragraph: removed words struck through, new words marked
+        const diff = make('div', { class: 'swm_edit_diff swm_hidden' });
         const block = make('div', { class: 'swm_edit_block' + (seam ? ' swm_seam' : '') }, [
             make('div', { class: 'swm_edit_from' }, [
                 make('span', { class: 'swm_tray_from', text: String(pick.s + 1), title: `스와이프 ${pick.s + 1}` }),
@@ -623,6 +659,7 @@ function drawEditList() {
             ]),
             ...(ref ? [ref] : []),
             area,
+            diff,
         ]);
         const refresh = () => {
             const edited = pick.text !== undefined;
@@ -632,6 +669,14 @@ function drawEditList() {
             mark.textContent = byAi ? 'AI가 고침' : edited ? '고침' : '';
             // the stored translation belongs to the text as it was before the edit
             refLabel.textContent = edited ? '고치기 전 번역 · ' : '';
+            diff.classList.toggle('swm_hidden', !edited);
+            diff.replaceChildren();
+            if (edited) {
+                diff.append(make('span', { class: 'swm_edit_diff_label', text: '바뀐 곳 · ' }));
+                for (const part of wordDiff(para.src, pick.text)) {
+                    diff.append(part.type === 'same' ? document.createTextNode(part.text) : make(part.type === 'del' ? 'del' : 'ins', { text: part.text }));
+                }
+            }
         };
         area.addEventListener('input', () => {
             if (area.value === para.src) delete pick.text;
