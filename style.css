@@ -1,0 +1,618 @@
+/* ---------- message button ---------- */
+.mes[is_user="true"] .swm_open,
+.mes[is_system="true"] .swm_open {
+    display: none;
+}
+
+/* Either button can be switched off in the settings */
+body.swm_no_menu .extraMesButtons .swm_open,
+body.swm_no_near .swm_near {
+    display: none !important;
+}
+
+#swm_settings .inline-drawer-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+#swm_settings small {
+    opacity: 0.7;
+}
+
+/* The small button by the swipe arrows: only on the newest reply, and only when it has several swipes */
+.swm_near {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* ST's own arrows: just left of the swipe counter, on the same line, as faint as the counter */
+#chat .mes.last_mes.swm_multi .swipeRightBlock > .swm_near {
+    display: flex;
+    position: absolute;
+    right: 100%;
+    bottom: var(--swipeCounterMargin, 0px);
+    width: 28px;
+    height: var(--swipeCounterHeight, 20px);
+    font-size: 13px;
+    opacity: 0.3;
+    z-index: 9999;
+}
+
+#chat .mes.last_mes.swm_multi .swipeRightBlock > .swm_near:hover,
+#chat .mes.last_mes.swm_multi .swipeRightBlock > .swm_near:focus-visible {
+    opacity: 0.7;
+}
+
+/* Swipe arrows shown as a row of buttons under the message: one more button at the end of that row */
+#chat .mes.swm_multi .stqa_footer_swipe > .swm_near {
+    display: flex;
+    width: 34px;
+    height: 100%;
+    font-size: 0.85em;
+    opacity: 0.6;
+}
+
+#chat .mes.swm_multi .stqa_footer_swipe > .swm_near:hover,
+#chat .mes.swm_multi .stqa_footer_swipe > .swm_near:active {
+    opacity: 1;
+}
+
+/* ---------- overlay ---------- */
+/* Sized in viewport units from the top-left corner: on phones SillyTavern's <html> is 0px tall,
+   so "inset: 0" or percentage heights would give an overlay with no height. */
+#swm_overlay {
+    --swm-bg: var(--SmartThemeBlurTintColor, #1f1f24);
+    --swm-text: var(--SmartThemeBodyColor, #e6e6e6);
+    --swm-border: var(--SmartThemeBorderColor, rgba(128, 128, 128, 0.4));
+    --swm-accent: var(--SmartThemeQuoteColor, #e0a84c);
+    --swm-soft: color-mix(in srgb, var(--swm-text) 9%, transparent);
+    --swm-softer: color-mix(in srgb, var(--swm-text) 5%, transparent);
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    z-index: 9990;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    color: var(--swm-text);
+}
+
+#swm_overlay.swm_hidden,
+#swm_overlay .swm_hidden {
+    display: none !important;
+}
+
+#swm_panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: min(1100px, 100vw);
+    height: 100vh;
+    height: min(860px, 100dvh);
+    background: var(--swm-bg);
+    border: 1px solid var(--swm-border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+#swm_overlay,
+#swm_overlay * {
+    box-sizing: border-box;
+}
+
+/* themes often force nowrap on labels and buttons */
+#swm_overlay .swm_para_text,
+#swm_overlay .swm_tray_note,
+#swm_overlay .swm_edit_info,
+#swm_overlay .swm_empty,
+#swm_overlay .swm_tag {
+    white-space: pre-wrap !important;
+    overflow-wrap: anywhere;
+    word-break: keep-all;
+}
+
+/* ---------- header ---------- */
+#swm_overlay .swm_head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--swm-border);
+}
+
+#swm_overlay .swm_title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+#swm_overlay .swm_seg {
+    display: inline-flex;
+    flex: 0 0 auto;
+    border: 1px solid var(--swm-border);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+#swm_overlay .swm_seg_btn {
+    padding: 4px 12px;
+    font-size: 0.85em;
+    cursor: pointer;
+    opacity: 0.6;
+    user-select: none;
+}
+
+#swm_overlay .swm_seg_btn.swm_on {
+    background: var(--swm-soft);
+    opacity: 1;
+    font-weight: 600;
+}
+
+#swm_overlay .swm_iconbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+#swm_overlay .swm_iconbtn.swm_small {
+    width: 30px;
+    height: 30px;
+}
+
+#swm_overlay .swm_iconbtn:hover {
+    background: var(--swm-soft);
+    opacity: 1;
+}
+
+#swm_overlay .swm_btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 5px 12px;
+    border: 1px solid var(--swm-border);
+    border-radius: 999px;
+    background: var(--swm-softer);
+    font-size: 0.9em;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+#swm_overlay .swm_btn.swm_small {
+    min-height: 28px;
+    padding: 2px 10px;
+    font-size: 0.8em;
+}
+
+#swm_overlay .swm_btn:hover {
+    background: var(--swm-soft);
+}
+
+#swm_overlay .swm_btn.swm_primary {
+    border-color: var(--swm-accent);
+    background: color-mix(in srgb, var(--swm-accent) 22%, transparent);
+    font-weight: 600;
+}
+
+#swm_overlay .swm_dim {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+#swm_overlay .swm_working {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* ---------- pager ---------- */
+#swm_overlay .swm_pager {
+    display: flex;
+    gap: 6px;
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+#swm_overlay .swm_page {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-width: 34px;
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--swm-border);
+    border-radius: 999px;
+    font-size: 0.85em;
+    cursor: pointer;
+    opacity: 0.65;
+    user-select: none;
+}
+
+#swm_overlay .swm_page.swm_on {
+    background: var(--swm-soft);
+    opacity: 1;
+    font-weight: 600;
+}
+
+#swm_overlay .swm_page_count {
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--swm-accent);
+    color: var(--swm-bg);
+    font-size: 0.8em;
+    font-weight: 700;
+    line-height: 1.5;
+}
+
+/* ---------- swipe columns ---------- */
+#swm_overlay .swm_cols {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 10px;
+    padding: 0 12px 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+    overscroll-behavior: contain;
+}
+
+#swm_overlay .swm_col {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 min(440px, 46%);
+    min-width: 0;
+    min-height: 0;
+    border: 1px solid var(--swm-border);
+    border-radius: 10px;
+    scroll-snap-align: start;
+    overflow: hidden;
+}
+
+#swm_overlay .swm_col.swm_current {
+    border-color: color-mix(in srgb, var(--swm-accent) 60%, var(--swm-border));
+}
+
+#swm_overlay .swm_col_head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    padding: 6px 8px 6px 10px;
+    border-bottom: 1px solid var(--swm-border);
+    background: var(--swm-softer);
+}
+
+#swm_overlay .swm_col_label {
+    flex: 0 0 auto;
+    font-size: 0.85em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+#swm_overlay .swm_col_tags {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+}
+
+#swm_overlay .swm_tag {
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--swm-soft);
+    font-size: 0.72em;
+    opacity: 0.85;
+}
+
+#swm_overlay .swm_tag.swm_tag_now {
+    background: color-mix(in srgb, var(--swm-accent) 30%, transparent);
+    opacity: 1;
+}
+
+#swm_overlay .swm_col_body {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 8px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+#swm_overlay .swm_para {
+    position: relative;
+    display: block;
+    margin: 0 0 6px;
+    padding: 8px 10px 8px 12px;
+    border: 1px solid transparent;
+    border-left: 3px solid transparent;
+    border-radius: 8px;
+    background: var(--swm-softer);
+    font-size: 0.95em;
+    line-height: 1.5;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#swm_overlay .swm_para:hover {
+    background: var(--swm-soft);
+}
+
+#swm_overlay .swm_para.swm_picked {
+    border-color: color-mix(in srgb, var(--swm-accent) 55%, transparent);
+    border-left-color: var(--swm-accent);
+    background: color-mix(in srgb, var(--swm-accent) 14%, transparent);
+}
+
+#swm_overlay .swm_para_no {
+    display: none;
+}
+
+#swm_overlay .swm_para.swm_picked .swm_para_no {
+    display: inline-block;
+    min-width: 20px;
+    margin-right: 6px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--swm-accent);
+    color: var(--swm-bg);
+    font-size: 0.78em;
+    font-weight: 700;
+    line-height: 1.6;
+    text-align: center;
+    vertical-align: 1px;
+}
+
+#swm_overlay .swm_empty {
+    padding: 10px;
+    font-size: 0.85em;
+    opacity: 0.6;
+    text-align: center;
+}
+
+/* ---------- tray ---------- */
+#swm_overlay .swm_tray {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    max-height: 34%;
+    border-top: 1px solid var(--swm-border);
+    background: var(--swm-softer);
+}
+
+#swm_overlay .swm_tray_head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 0 0 auto;
+    padding: 8px 12px;
+}
+
+#swm_overlay .swm_tray_count {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+#swm_overlay .swm_tray_note {
+    flex: 0 0 auto;
+    padding: 0 12px 6px;
+    font-size: 0.8em;
+    color: var(--swm-accent);
+}
+
+#swm_overlay .swm_tray_list {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 0 8px 8px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+#swm_overlay .swm_tray_row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 2px 2px 6px;
+    border-radius: 8px;
+}
+
+/* a paragraph that comes from a different swipe than the one above it */
+#swm_overlay .swm_tray_row.swm_seam {
+    margin-top: 3px;
+    border-top: 1px dashed color-mix(in srgb, var(--swm-accent) 60%, transparent);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+#swm_overlay .swm_tray_from {
+    flex: 0 0 auto;
+    min-width: 22px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--swm-soft);
+    font-size: 0.78em;
+    font-weight: 700;
+    line-height: 1.7;
+    text-align: center;
+}
+
+#swm_overlay .swm_tray_text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.88em;
+}
+
+/* ---------- edit sheet ---------- */
+#swm_overlay .swm_sheet {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--swm-bg);
+}
+
+#swm_overlay .swm_edit_text {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: auto !important;
+    max-width: none !important;
+    margin: 10px 12px 6px !important;
+    padding: 10px !important;
+    border: 1px solid var(--swm-border) !important;
+    border-radius: 10px !important;
+    background: var(--swm-softer) !important;
+    color: var(--swm-text) !important;
+    font-family: inherit;
+    font-size: 16px; /* 16px stops iOS from zooming in on focus */
+    line-height: 1.5;
+    resize: none;
+    white-space: pre-wrap !important;
+}
+
+#swm_overlay .swm_edit_info {
+    flex: 0 0 auto;
+    min-height: 1.4em;
+    padding: 0 14px;
+    font-size: 0.82em;
+    color: var(--swm-accent);
+}
+
+#swm_overlay .swm_ai {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 0 0 auto;
+    padding: 8px 12px 12px;
+    border-top: 1px solid var(--swm-border);
+}
+
+#swm_overlay .swm_ai_row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+#swm_overlay .swm_ai_label {
+    flex: 0 0 auto;
+    font-size: 0.85em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+#swm_overlay .swm_profile_name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.82em;
+    opacity: 0.75;
+    overflow-wrap: anywhere;
+}
+
+#swm_overlay .swm_profile_name.swm_warn {
+    color: var(--swm-accent);
+    opacity: 1;
+}
+
+#swm_overlay .swm_edit_note {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    height: 34px !important;
+    margin: 0 !important;
+    padding: 0 10px !important;
+    border: 1px solid var(--swm-border) !important;
+    border-radius: 8px !important;
+    background-color: var(--swm-softer) !important;
+    color: var(--swm-text) !important;
+    font-size: 16px;
+    box-shadow: none !important;
+}
+
+#swm_overlay .swm_edit_note {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+}
+
+#swm_overlay .swm_sheet.swm_busy .swm_btn:not(.swm_working) {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+/* ---------- phones ---------- */
+@media (max-width: 768px) {
+    #swm_panel {
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh;
+        border: none;
+        border-radius: 0;
+    }
+
+    #swm_overlay .swm_cols {
+        gap: 8px;
+        padding: 0 8px 8px;
+        scroll-snap-type: x mandatory;
+    }
+
+    /* one swipe per screen, with a sliver of the next one showing */
+    #swm_overlay .swm_col {
+        flex: 0 0 92%;
+        scroll-snap-align: center;
+    }
+
+    #swm_overlay .swm_tray {
+        max-height: 38%;
+    }
+
+    #swm_overlay .swm_tray_head {
+        padding: 8px;
+    }
+
+    #swm_overlay .swm_btn span {
+        font-size: 0.95em;
+    }
+}
+
+/* touch screens have no hover */
+@media (hover: none) {
+    #swm_overlay .swm_para:hover {
+        background: var(--swm-softer);
+    }
+
+    #swm_overlay .swm_para.swm_picked:hover {
+        background: color-mix(in srgb, var(--swm-accent) 14%, transparent);
+    }
+}
