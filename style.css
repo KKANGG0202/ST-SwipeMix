@@ -697,6 +697,15 @@ body.swm_no_near .swm_near {
         border-radius: 0;
     }
 
+    /* narrow header: the title keeps its room (the leading icon goes, the view switch gets slimmer) */
+    #swm_overlay .swm_head > i:first-child {
+        display: none;
+    }
+
+    #swm_overlay .swm_seg_btn {
+        padding: 4px 9px;
+    }
+
     #swm_overlay .swm_cols {
         gap: 8px;
         padding: 0 8px 8px;

@@ -4,7 +4,7 @@
 
 const MODULE = 'swipeMix';
 const DEFAULTS = Object.freeze({
-    profileId: '',   // connection profile used by the two "fix" helpers
+    profileId: 'current', // what the two "fix" helpers send their request through: 'current' = the connection in use, or a connection profile id
     view: 'tr',      // 'tr' = show the stored translation when there is one, 'src' = original text
     menuButton: true, // puzzle button in the message menu
     nearButton: true, // small puzzle button by the swipe arrows of the newest reply
@@ -13,6 +13,8 @@ const DEFAULTS = Object.freeze({
 /** Blank-line paragraph break. */
 const PARA_SPLIT = /\r?\n[\t ]*\r?\n(?:[\t ]*\r?\n)*/;
 const HANGUL = /[ㄱ-ㆎ가-힣]/;
+
+const CURRENT = 'current';
 
 const ui = {};
 /** Everything about the picker that is open right now (null when closed). */
@@ -204,7 +206,7 @@ function buildOverlay() {
     ui.overlay = make('div', { id: 'swm_overlay', class: 'swm_hidden', 'data-bl-native-ext-colors': '' });
     ui.panel = make('div', { id: 'swm_panel', role: 'dialog', 'aria-label': '스와이프 합치기' });
 
-    ui.title = make('div', { class: 'swm_title', text: '스와이프 합치기' });
+    ui.title = make('div', { class: 'swm_title', text: '합치기' });
     ui.viewTr = make('span', { class: 'swm_seg_btn', text: '번역' });
     ui.viewSrc = make('span', { class: 'swm_seg_btn', text: '원문' });
     ui.viewSeg = make('div', { class: 'swm_seg', title: '저장된 번역으로 보기 / 원문으로 보기' }, [ui.viewTr, ui.viewSrc]);
@@ -229,7 +231,7 @@ function buildOverlay() {
 
     // edit sheet: lives inside the panel, which has a real size, so it can simply fill it
     ui.editList = make('div', { class: 'swm_edit_list' });
-    ui.editNote = make('input', { class: 'swm_edit_note', type: 'text', placeholder: '부탁할 말 (한글로 써도 돼요). 예: 나간 사람이 다시 앉아 있지 않게' });
+    ui.editNote = make('input', { class: 'swm_edit_note', type: 'text', placeholder: '부탁할 말 (한글로 써도 돼요)' });
     ui.toSourceBtn = make('div', { class: 'swm_btn swm_hidden', tabindex: '0', title: '한글로 쓴 줄만 이야기 원문의 언어와 말투로 바꿔요. 나머지 줄은 그대로예요.' }, [icon('fa-language'), make('span', { text: '한글 줄만 원문 언어로' })]);
     ui.smoothBtn = make('div', { class: 'swm_btn', tabindex: '0', title: '붙인 자리에서 앞뒤가 안 맞는 문장만 최소한으로 고쳐요.' }, [icon('fa-wand-magic-sparkles'), make('span', { text: '이음새 다듬기' })]);
     ui.undoBtn = make('div', { class: 'swm_btn swm_hidden', tabindex: '0' }, [icon('fa-rotate-left'), make('span', { text: '되돌리기' })]);
@@ -301,7 +303,7 @@ function openPicker(mesId) {
         changed: new Set(),
         busy: false,
     };
-    ui.title.textContent = `스와이프 합치기 · #${mesId}`;
+    ui.title.textContent = `합치기 #${mesId}`;
     ui.viewSeg.classList.toggle('swm_hidden', !swipes.some(s => s.translated));
     drawView();
     drawColumns();
@@ -606,19 +608,30 @@ function undoAi() {
     ui.editInfo.textContent = '되돌렸어요.';
 }
 
-/** The edit sheet only names the profile in use; it is chosen in the extension's settings. */
-function showProfileName() {
-    let name = '';
-    try { name = ctx().ConnectionManagerRequestService?.getSupportedProfiles?.().find(p => p.id === settings().profileId)?.name ?? ''; } catch { name = ''; }
-    ui.profileName.textContent = name ? `연결 프로필: ${name}` : '설정(창 위쪽 톱니바퀴)에서 연결 프로필을 먼저 골라 주세요.';
-    ui.profileName.classList.toggle('swm_warn', !name);
+/** The chosen connection profile, or null when the helpers go through the connection in use. */
+function chosenProfile() {
+    const id = settings().profileId;
+    if (!id || id === CURRENT) return null;
+    let profiles = [];
+    try { profiles = ctx().ConnectionManagerRequestService?.getSupportedProfiles?.() ?? []; } catch { profiles = []; }
+    // { missing: true } = a profile was chosen but is not there any more
+    return profiles.find(p => p.id === id) ?? { id, missing: true };
 }
 
-/** Fills the profile dropdown in the settings with the current profiles. */
+/** The edit sheet only names what is in use; it is chosen in the settings. */
+function showProfileName() {
+    const profile = chosenProfile();
+    ui.profileName.textContent = !profile
+        ? '연결: 현재 연결'
+        : profile.missing ? '고른 연결 프로필이 없어졌어요. 설정에서 다시 골라 주세요.' : `연결: ${profile.name}`;
+    ui.profileName.classList.toggle('swm_warn', !!profile?.missing);
+}
+
+/** Fills the dropdown in the settings: the connection in use first, then the connection profiles. */
 function fillProfiles(select) {
     let profiles = [];
     try { profiles = ctx().ConnectionManagerRequestService?.getSupportedProfiles?.() ?? []; } catch { profiles = []; }
-    select.replaceChildren(make('option', { value: '', text: '연결 프로필 고르기 (싼 모델 추천)' }));
+    select.replaceChildren(make('option', { value: CURRENT, text: '현재 연결 (지금 쓰는 모델)' }));
     for (const p of profiles) {
         const option = make('option', { value: p.id, text: p.name });
         if (settings().profileId === p.id) option.selected = true;
@@ -667,9 +680,9 @@ function buildSettingsSheet() {
             make('div', { class: 'swm_set_title', text: '퍼즐 버튼 위치' }),
             check('menuButton', '메시지 메뉴(…) 안에 보이기', 'nearButton'),
             check('nearButton', '맨 아래 답변의 스와이프 번호 옆에 보이기 (스와이프가 2개 이상일 때)', 'menuButton'),
-            make('div', { class: 'swm_set_title', text: 'AI로 고치기에 쓸 연결 프로필' }),
+            make('div', { class: 'swm_set_title', text: 'AI로 고치기에 쓸 연결' }),
             ui.setProfile,
-            make('div', { class: 'swm_set_note', text: '"이음새 다듬기"와 "한글 줄만 원문 언어로"를 누를 때만 이 프로필로 요청을 보내요.' }),
+            make('div', { class: 'swm_set_note', text: '"이음새 다듬기"와 "한글 줄만 원문 언어로"를 누를 때만 요청을 보내요. 현재 연결은 지금 채팅에 쓰는 모델 그대로예요. 싼 모델로 돌리고 싶으면 연결 프로필을 골라요.' }),
             make('div', { class: 'swm_set_note', text: '이 설정 창은 /swipemix 명령으로도 열 수 있어요.' }),
         ]),
     ]);
@@ -711,15 +724,20 @@ function setBusy(on, btn) {
     ui.editList.querySelectorAll('textarea').forEach((area) => { area.readOnly = on; });
 }
 
-/** Sends one request through the chosen connection profile and returns the reply text. */
+/** Sends one request through the connection in use or the chosen connection profile; returns the reply text. */
 async function askModel(system, user, sourceLength) {
     const c = ctx();
-    const profileId = settings().profileId;
-    if (!profileId || !c.ConnectionManagerRequestService) throw new Error('NO_PROFILE');
+    const messages = [{ role: 'system', content: system }, { role: 'user', content: user }];
     const maxTokens = Math.min(16000, 800 + Math.ceil(sourceLength * 1.2));
+    const profile = chosenProfile();
+    if (!profile) {
+        if (typeof c.generateRaw !== 'function') throw new Error('NO_PROFILE');
+        return String(await c.generateRaw({ prompt: messages, responseLength: maxTokens }) ?? '');
+    }
+    if (profile.missing || !c.ConnectionManagerRequestService) throw new Error('NO_PROFILE');
     const res = await c.ConnectionManagerRequestService.sendRequest(
-        profileId,
-        [{ role: 'system', content: system }, { role: 'user', content: user }],
+        profile.id,
+        messages,
         maxTokens,
         { stream: false, extractData: true, includePreset: false, includeInstruct: false },
     );
@@ -737,7 +755,7 @@ function parseStringArray(raw, count) {
 }
 
 function aiErrorText(error) {
-    if (error?.message === 'NO_PROFILE') return 'AI로 고치려면 설정(창 위쪽 톱니바퀴)에서 연결 프로필을 먼저 골라 주세요.';
+    if (error?.message === 'NO_PROFILE') return '이 연결로는 보낼 수 없어요. 설정(창 위쪽 톱니바퀴)에서 연결을 다시 골라 주세요.';
     if (error?.message === 'BAD_REPLY') return '답을 읽지 못했어요. 글은 그대로예요. 다시 시도해 주세요.';
     return `고치지 못했어요. 글은 그대로예요.${error?.message ? ` (${String(error.message).slice(0, 120)})` : ''}`;
 }
