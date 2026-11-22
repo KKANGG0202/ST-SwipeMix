@@ -576,8 +576,12 @@ body.swm_no_near .swm_near {
     word-break: keep-all;
 }
 
-#swm_overlay .swm_edit_block.swm_edited .swm_edit_ref {
+#swm_overlay .swm_edit_ref.swm_stale {
     opacity: 0.5;
+}
+
+#swm_overlay .swm_ko_btn {
+    margin-top: 8px;
 }
 
 #swm_overlay .swm_edit_ref_label {

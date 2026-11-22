@@ -235,7 +235,7 @@ function buildOverlay() {
     ui.toSourceBtn = make('div', { class: 'swm_btn swm_hidden', tabindex: '0', title: '한글로 쓴 줄만 이야기 원문의 언어와 말투로 바꿔요. 나머지 줄은 그대로예요.' }, [icon('fa-language'), make('span', { text: '한글 줄만 원문 언어로' })]);
     ui.smoothBtn = make('div', { class: 'swm_btn', tabindex: '0', title: '붙인 자리에서 앞뒤가 안 맞는 문장만 최소한으로 고쳐요. 부탁할 말을 쓰면 그 내용은 필요한 문단 전부에 반영해요.' }, [icon('fa-wand-magic-sparkles'), make('span', { text: '이음새 다듬기' })]);
     ui.undoBtn = make('div', { class: 'swm_btn swm_hidden', tabindex: '0' }, [icon('fa-rotate-left'), make('span', { text: '되돌리기' })]);
-    ui.resetBtn = make('div', { class: 'swm_btn', tabindex: '0', title: '고친 내용을 버리고 고른 문단 그대로 되돌려요.' }, [icon('fa-arrow-rotate-left'), make('span', { text: '고른 대로' })]);
+    ui.resetBtn = make('div', { class: 'swm_btn', tabindex: '0', title: '직접 고친 것과 AI가 고친 것을 전부 버리고, 처음 고른 문단 그대로 되돌려요.' }, [icon('fa-arrow-rotate-left'), make('span', { text: '전부 원래대로' })]);
     ui.editDone = make('div', { class: 'swm_btn swm_primary', tabindex: '0' }, [icon('fa-check'), make('span', { text: '완료' })]);
     ui.editInfo = make('div', { class: 'swm_edit_info' });
     ui.profileName = make('span', { class: 'swm_profile_name' });
@@ -648,7 +648,11 @@ function drawEditList() {
         area.value = pickText(pick);
         const mark = make('span', { class: 'swm_edit_mark' });
         const refLabel = make('span', { class: 'swm_edit_ref_label' });
-        const ref = para.tr ? make('div', { class: 'swm_edit_ref' }, [refLabel, make('span', { text: para.tr })]) : null;
+        const refText = make('span');
+        const ref = make('div', { class: 'swm_edit_ref' }, [refLabel, refText]);
+        // asks for a Korean reading of the paragraph as it is now (only on request: it costs a call)
+        const koBtn = make('div', { class: 'swm_btn swm_small swm_ko_btn swm_hidden', tabindex: '0' }, [icon('fa-language'), make('span', { text: '고친 글 한글로 보기' })]);
+        koBtn.addEventListener('click', () => readInKorean(pick, koBtn));
         // what changed against the picked paragraph: removed words struck through, new words marked
         const diff = make('div', { class: 'swm_edit_diff swm_hidden' });
         const block = make('div', { class: 'swm_edit_block' + (seam ? ' swm_seam' : '') }, [
@@ -657,9 +661,10 @@ function drawEditList() {
                 make('span', { text: seam ? `${at + 1}번째 문단 · 여기서 스와이프가 바뀌어요` : `${at + 1}번째 문단` }),
                 mark,
             ]),
-            ...(ref ? [ref] : []),
+            ref,
             area,
             diff,
+            koBtn,
         ]);
         const refresh = () => {
             const edited = pick.text !== undefined;
@@ -667,8 +672,16 @@ function drawEditList() {
             block.classList.toggle('swm_edited', edited);
             block.classList.toggle('swm_ai', byAi);
             mark.textContent = byAi ? 'AI가 고침' : edited ? '고침' : '';
-            // the stored translation belongs to the text as it was before the edit
-            refLabel.textContent = edited ? '고치기 전 번역 · ' : '';
+            // reading line: a translation made for the edited text when there is one, otherwise the stored
+            // translation, which belongs to the text as it was before the edit
+            const fresh = edited && pick.ko && pick.ko.src === pick.text ? pick.ko.text : '';
+            refLabel.textContent = fresh ? '고친 글 번역 · ' : (edited && para.tr ? '고치기 전 번역 · ' : '');
+            refText.textContent = fresh || para.tr;
+            ref.classList.toggle('swm_hidden', !fresh && !para.tr);
+            ref.classList.toggle('swm_stale', edited && !fresh);
+            const lines = pickText(pick).split('\n').filter(l => l.trim());
+            const korean = lines.filter(hasHangul).length;
+            koBtn.classList.toggle('swm_hidden', !edited || !!fresh || !lines.length || korean >= lines.length / 2);
             diff.classList.toggle('swm_hidden', !edited);
             diff.replaceChildren();
             if (edited) {
@@ -723,7 +736,7 @@ function resetEdit() {
     state.picks.forEach((pick) => { delete pick.text; });
     state.changed.clear();
     redrawEdit();
-    ui.editInfo.textContent = '고른 문단 그대로 되돌렸어요.';
+    ui.editInfo.textContent = '고친 것을 전부 버리고 처음 고른 문단으로 되돌렸어요.';
 }
 
 function undoAi() {
@@ -809,7 +822,7 @@ function buildSettingsSheet() {
             check('nearButton', '맨 아래 답변의 스와이프 화살표 옆에 보이기 (스와이프가 2개 이상일 때)', 'menuButton'),
             make('div', { class: 'swm_set_title', text: 'AI로 고치기에 쓸 연결' }),
             ui.setProfile,
-            make('div', { class: 'swm_set_note', text: '"이음새 다듬기"와 "한글 줄만 원문 언어로"를 누를 때만 요청을 보내요. 현재 연결은 지금 채팅에 쓰는 모델 그대로예요. 싼 모델로 돌리고 싶으면 연결 프로필을 골라요.' }),
+            make('div', { class: 'swm_set_note', text: '고치기 화면의 AI 버튼(이음새 다듬기, 한글 줄만 원문 언어로, 고친 글 한글로 보기)을 누를 때만 요청을 보내요. 현재 연결은 지금 채팅에 쓰는 모델 그대로예요. 싼 모델로 돌리고 싶으면 연결 프로필을 골라요.' }),
             make('div', { class: 'swm_set_note', text: '이 설정 창은 /swipemix 명령으로도 열 수 있어요.' }),
         ]),
     ]);
@@ -936,6 +949,35 @@ ${JSON.stringify(paragraphs)}`;
     refreshEditButtons();
 }
 
+/** Asks for a Korean reading of one edited paragraph and shows it in that paragraph's reading line. */
+async function readInKorean(pick, btn) {
+    if (state.busy) return;
+    const text = pickText(pick);
+    const para = paraOf(pick);
+    const system = 'You are a translator for roleplay and fiction. You translate faithfully and naturally, keeping tone, nuance and formatting.';
+    const user = `Translate the passage under "Passage" into Korean.
+Rules:
+- Keep macros such as {{user}} and {{char}}, names, markdown and line breaks exactly as they are.
+- Do not add, drop or explain anything.
+- Reply with the Korean translation only.
+${para.tr ? `\nFor consistent wording, here is an earlier version of the passage and the Korean translation it had:\n${para.src}\n---\n${para.tr}\n` : ''}
+Passage:
+${text}`;
+    setBusy(true, btn);
+    ui.editInfo.textContent = '한글로 옮기는 중…';
+    try {
+        const reply = (await askModel(system, user, text.length * 2)).replace(/^```[a-z]*\n?|```$/gi, '').trim();
+        if (!reply) throw new Error('BAD_REPLY');
+        pick.ko = { src: text, text: reply };
+        ui.editInfo.textContent = '';
+    } catch (error) {
+        console.warn('[SwipeMix] Reading translation failed', error);
+        ui.editInfo.textContent = aiErrorText(error).replace('고치지 못했어요. 글은 그대로예요.', '한글로 옮기지 못했어요.');
+    }
+    setBusy(false, btn);
+    redrawEdit();
+}
+
 /** Rewrites only the lines typed in Korean into the language and voice of the rest of the text. */
 async function koreanLinesToSource() {
     if (state.busy) return;
@@ -985,9 +1027,11 @@ ${JSON.stringify(spots.map(([b, l]) => blocks[b][l]))}`;
  * Reused only when the text is exactly the picked paragraphs and each of them has a translation.
  */
 function translationForNewSwipe() {
-    if (hasEdits() || !state.picks.length) return '';
-    if (hasManagedTranslation(state.message)) return '';
-    const parts = state.picks.map(pick => paraOf(pick).tr);
+    if (!state.picks.length || hasManagedTranslation(state.message)) return '';
+    const parts = state.picks.map((pick) => {
+        if (pick.text === undefined) return paraOf(pick).tr;
+        return pick.ko && pick.ko.src === pick.text ? pick.ko.text : '';
+    });
     return parts.every(Boolean) ? parts.join('\n\n') : '';
 }
 
