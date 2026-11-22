@@ -233,7 +233,7 @@ function buildOverlay() {
     ui.editList = make('div', { class: 'swm_edit_list' });
     ui.editNote = make('input', { class: 'swm_edit_note', type: 'text', placeholder: '부탁할 말 (한글로 써도 돼요)' });
     ui.toSourceBtn = make('div', { class: 'swm_btn swm_hidden', tabindex: '0', title: '한글로 쓴 줄만 이야기 원문의 언어와 말투로 바꿔요. 나머지 줄은 그대로예요.' }, [icon('fa-language'), make('span', { text: '한글 줄만 원문 언어로' })]);
-    ui.smoothBtn = make('div', { class: 'swm_btn', tabindex: '0', title: '붙인 자리에서 앞뒤가 안 맞는 문장만 최소한으로 고쳐요.' }, [icon('fa-wand-magic-sparkles'), make('span', { text: '이음새 다듬기' })]);
+    ui.smoothBtn = make('div', { class: 'swm_btn', tabindex: '0', title: '붙인 자리에서 앞뒤가 안 맞는 문장만 최소한으로 고쳐요. 부탁할 말을 쓰면 그 내용은 필요한 문단 전부에 반영해요.' }, [icon('fa-wand-magic-sparkles'), make('span', { text: '이음새 다듬기' })]);
     ui.undoBtn = make('div', { class: 'swm_btn swm_hidden', tabindex: '0' }, [icon('fa-rotate-left'), make('span', { text: '되돌리기' })]);
     ui.resetBtn = make('div', { class: 'swm_btn', tabindex: '0', title: '고친 내용을 버리고 고른 문단 그대로 되돌려요.' }, [icon('fa-arrow-rotate-left'), make('span', { text: '고른 대로' })]);
     ui.editDone = make('div', { class: 'swm_btn swm_primary', tabindex: '0' }, [icon('fa-check'), make('span', { text: '완료' })]);
@@ -772,16 +772,18 @@ async function smoothSeams() {
     const seams = seamNumbers();
     const note = ui.editNote.value.trim();
     const system = 'You are a careful fiction editor. You repair continuity in a passage that was assembled from paragraphs of several alternative drafts of the same scene.';
+    // With a request from the user, the request is carried out wherever it applies; without one, only the joins are touched.
     const user = `The paragraphs in the JSON array below were taken from different drafts of the same scene and joined in this order.
-Task: make them read as one continuous passage.
+Task: make them read as one continuous passage${note ? ", and carry out the user's request given below" : ''}.
 Rules:
-- Change as little as possible. Edit only sentences next to a join, and only where they contradict or repeat what the earlier paragraphs established (positions, actions, who is present, objects, time, tense, pronouns), or where the transition is abrupt.
+- Change as little as possible.
+${note ? "- The user's request comes first: apply it in every paragraph where it is needed, including paragraphs far from a join. Change only what the request needs.\n" : ''}- ${note ? 'Apart from the request, edit' : 'Edit'} only sentences next to a join, and only where they contradict or repeat what the earlier paragraphs established (positions, actions, who is present, objects, time, tense, pronouns), or where the transition is abrupt.
 - Keep every other sentence exactly as written, character for character.
 - Keep the original language, narrative voice, tense, formatting, markdown, quotation style, and macros such as {{user}} and {{char}}.
 - Do not add new events, do not summarize, and do not merge, split, drop or reorder paragraphs.
 - ${seams.length ? `Joins: paragraph number(s) ${seams.join(', ')} (counting from 1) each start a part taken from a different draft than the paragraph before.` : 'All paragraphs come from the same draft, so there may be nothing to fix apart from what the user asks for.'}
-${note ? `- The user asks for this in particular (the request may be written in Korean; follow it, but write the story text in the story's own language): ${note}\n` : ''}- Reply with a JSON array of strings only: exactly ${paragraphs.length} items, one per paragraph, in the same order.
-
+- Reply with a JSON array of strings only: exactly ${paragraphs.length} items, one per paragraph, in the same order.
+${note ? `\nUser's request (it may be written in Korean; follow it, but write the story text in the story's own language):\n${note}\n` : ''}
 ${JSON.stringify(paragraphs)}`;
     setBusy(true, ui.smoothBtn);
     ui.editInfo.textContent = '이음새를 다듬는 중…';
