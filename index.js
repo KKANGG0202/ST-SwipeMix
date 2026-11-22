@@ -251,7 +251,12 @@ function buildOverlay() {
     ]);
 
     buildSettingsSheet();
-    ui.panel.append(head, ui.pager, ui.cols, ui.tray, ui.editSheet, ui.setSheet);
+    // small menu for picking a run of paragraphs at once (long press on a paragraph)
+    ui.rangeTitle = make('div', { class: 'swm_range_title' });
+    ui.rangeBtns = make('div', { class: 'swm_range_btns' });
+    ui.rangeMenu = make('div', { class: 'swm_range swm_hidden' }, [make('div', { class: 'swm_range_box' }, [ui.rangeTitle, ui.rangeBtns])]);
+    ui.rangeMenu.addEventListener('click', (e) => { if (e.target === ui.rangeMenu) closeRange(); });
+    ui.panel.append(head, ui.pager, ui.cols, ui.tray, ui.rangeMenu, ui.editSheet, ui.setSheet);
     ui.overlay.append(ui.panel);
     document.body.append(ui.overlay);
 
@@ -271,6 +276,7 @@ function buildOverlay() {
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape' || ui.overlay.classList.contains('swm_hidden')) return;
         if (!ui.setSheet.classList.contains('swm_hidden')) closeSettings();
+        else if (!ui.rangeMenu.classList.contains('swm_hidden')) closeRange();
         else if (!ui.editSheet.classList.contains('swm_hidden')) closeEdit();
         else closePicker();
     });
@@ -310,6 +316,7 @@ function openPicker(mesId) {
     drawTray();
     ui.editSheet.classList.add('swm_hidden');
     ui.setSheet.classList.add('swm_hidden');
+    ui.rangeMenu.classList.add('swm_hidden');
     ui.overlay.classList.remove('swm_hidden');
     // start on the swipe that is on screen
     const currentCol = ui.cols.querySelector('.swm_col.swm_current');
@@ -376,6 +383,7 @@ function drawColumns() {
                 make('span', { class: 'swm_para_no' }),
                 make('span', { class: 'swm_para_text', text: shownText(para) }),
             ]);
+            bindLongPress(node, () => openRange(swipe.index, p));
             node.addEventListener('click', () => togglePick(swipe.index, p));
             body.append(node);
         });
@@ -416,6 +424,80 @@ function markPager() {
         if (left >= start && left < start + col.offsetWidth) best = col.getAttribute('data-swipe');
     });
     ui.pager.querySelectorAll('.swm_page').forEach(chip => chip.classList.toggle('swm_on', chip.getAttribute('data-swipe') === best));
+}
+
+/**
+ * Long press (or right-click) runs onLong and swallows the click that follows it.
+ * A finger that moves is scrolling, not pressing, so it cancels the press.
+ */
+function bindLongPress(node, onLong) {
+    let timer = null;
+    let start = null;
+    let fired = false;
+    const cancel = () => {
+        clearTimeout(timer);
+        timer = null;
+    };
+    node.addEventListener('pointerdown', (e) => {
+        fired = false;
+        cancel();
+        start = { x: e.clientX, y: e.clientY };
+        timer = setTimeout(() => {
+            timer = null;
+            fired = true;
+            if (navigator.vibrate) navigator.vibrate(15);
+            onLong();
+        }, 450);
+    });
+    node.addEventListener('pointermove', (e) => {
+        if (timer && start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 12) cancel();
+    });
+    for (const type of ['pointerup', 'pointerleave', 'pointercancel']) node.addEventListener(type, cancel);
+    node.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (!fired) {
+            fired = true;
+            cancel();
+            onLong();
+        }
+    });
+    node.addEventListener('click', (e) => {
+        if (!fired) return;
+        fired = false;
+        e.stopImmediatePropagation();
+    }, true);
+}
+
+/** Menu for one paragraph: pick everything from it to the end of its swipe, or from the start up to it. */
+function openRange(s, p) {
+    if (!state || state.busy) return;
+    const last = state.swipes[s].paras.length - 1;
+    const fresh = (from, to) => {
+        let n = 0;
+        for (let i = from; i <= to; i++) if (!state.picks.some(x => x.s === s && x.p === i)) n++;
+        return n;
+    };
+    const option = (label, from, to) => {
+        const n = fresh(from, to);
+        const btn = make('div', { class: 'swm_btn' + (n ? '' : ' swm_dim'), tabindex: '0' }, [make('span', { text: `${label} (${n}문단)` })]);
+        btn.addEventListener('click', () => {
+            for (let i = from; i <= to; i++) {
+                if (!state.picks.some(x => x.s === s && x.p === i)) addPick(s, i, true);
+            }
+            closeRange();
+            afterPicksChanged();
+        });
+        return btn;
+    };
+    const cancel = make('div', { class: 'swm_btn', tabindex: '0' }, [make('span', { text: '취소' })]);
+    cancel.addEventListener('click', closeRange);
+    ui.rangeTitle.textContent = `스와이프 ${s + 1} · ${p + 1}번째 문단`;
+    ui.rangeBtns.replaceChildren(option('여기부터 끝까지 담기', p, last), option('처음부터 여기까지 담기', 0, p), cancel);
+    ui.rangeMenu.classList.remove('swm_hidden');
+}
+
+function closeRange() {
+    ui.rangeMenu.classList.add('swm_hidden');
 }
 
 function addPick(s, p, quiet = false) {
@@ -469,7 +551,7 @@ function drawTray() {
     ui.trayNote.textContent = edits ? `고친 문단이 ${edits}개 있어요. 고친 대로 저장돼요.` : '';
     ui.trayList.replaceChildren();
     if (!n) {
-        ui.trayList.append(make('div', { class: 'swm_empty', text: '위에서 문단을 탭하면 순서대로 여기에 담겨요.' }));
+        ui.trayList.append(make('div', { class: 'swm_empty', text: '위에서 문단을 탭하면 순서대로 여기에 담겨요. 길게 누르면 그 문단부터 끝까지 한 번에 담을 수 있어요.' }));
         return;
     }
     state.picks.forEach((pick, at) => {

@@ -354,6 +354,50 @@ body.swm_no_near .swm_near {
     background: var(--swm-soft);
 }
 
+/* paragraphs are tap and long-press targets: no text selection or callout while pressing */
+#swm_overlay .swm_para {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+/* ---------- range menu (long press on a paragraph) ---------- */
+#swm_overlay .swm_range {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+#swm_overlay .swm_range_box {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: min(460px, 100%);
+    padding: 14px;
+    border: 1px solid var(--swm-border);
+    border-bottom: none;
+    border-radius: 14px 14px 0 0;
+    background: var(--swm-bg);
+}
+
+#swm_overlay .swm_range_title {
+    font-weight: 600;
+}
+
+#swm_overlay .swm_range_btns {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#swm_overlay .swm_range_btns .swm_btn {
+    justify-content: center;
+    min-height: 42px;
+}
+
 #swm_overlay .swm_para.swm_picked {
     border-color: color-mix(in srgb, var(--swm-accent) 55%, transparent);
     border-left-color: var(--swm-accent);
