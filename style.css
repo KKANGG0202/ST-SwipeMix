@@ -10,16 +10,6 @@ body.swm_no_near .swm_near {
     display: none !important;
 }
 
-#swm_settings .inline-drawer-content {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-#swm_settings small {
-    opacity: 0.7;
-}
-
 /* The small button by the swipe arrows: only on the newest reply, and only when it has several swipes */
 .swm_near {
     display: none;
@@ -483,22 +473,94 @@ body.swm_no_near .swm_near {
     background: var(--swm-bg);
 }
 
-#swm_overlay .swm_edit_text {
+#swm_overlay .swm_edit_list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
     flex: 1 1 auto;
     min-height: 0;
-    width: auto !important;
+    padding: 10px 12px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+#swm_overlay .swm_edit_block {
+    flex: 0 0 auto;
+    padding: 8px;
+    border: 1px solid var(--swm-border);
+    border-radius: 10px;
+    background: var(--swm-softer);
+}
+
+/* a paragraph that comes from a different swipe than the one above it */
+#swm_overlay .swm_edit_block.swm_seam {
+    border-top: 2px dashed color-mix(in srgb, var(--swm-accent) 70%, transparent);
+}
+
+#swm_overlay .swm_edit_block.swm_ai {
+    border-color: var(--swm-accent);
+}
+
+#swm_overlay .swm_edit_from {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 0.8em;
+    opacity: 0.85;
+}
+
+#swm_overlay .swm_edit_mark {
+    margin-left: auto;
+    color: var(--swm-accent);
+    font-weight: 600;
+}
+
+/* the stored translation: to read, not to edit */
+#swm_overlay .swm_edit_ref {
+    margin-bottom: 6px;
+    padding: 0 2px 6px;
+    border-bottom: 1px dashed var(--swm-border);
+    font-size: 0.92em;
+    line-height: 1.5;
+    opacity: 0.8;
+    white-space: pre-wrap !important;
+    overflow-wrap: anywhere;
+    word-break: keep-all;
+}
+
+#swm_overlay .swm_edit_block.swm_edited .swm_edit_ref {
+    opacity: 0.5;
+}
+
+#swm_overlay .swm_edit_ref_label {
+    font-size: 0.85em;
+    font-weight: 600;
+}
+
+#swm_overlay .swm_edit_area {
+    display: block;
+    width: 100% !important;
     max-width: none !important;
-    margin: 10px 12px 6px !important;
-    padding: 10px !important;
+    min-height: 2.8em;
+    margin: 0 !important;
+    padding: 8px !important;
     border: 1px solid var(--swm-border) !important;
-    border-radius: 10px !important;
-    background: var(--swm-softer) !important;
+    border-radius: 8px !important;
+    background: var(--swm-bg) !important;
     color: var(--swm-text) !important;
     font-family: inherit;
     font-size: 16px; /* 16px stops iOS from zooming in on focus */
     line-height: 1.5;
     resize: none;
+    overflow: hidden;
     white-space: pre-wrap !important;
+    box-shadow: none !important;
+}
+
+#swm_overlay .swm_tray_row.swm_edited .swm_tray_text {
+    font-style: italic;
 }
 
 #swm_overlay .swm_edit_info {
@@ -564,6 +626,60 @@ body.swm_no_near .swm_near {
 #swm_overlay .swm_edit_note {
     flex: 0 0 auto !important;
     width: 100% !important;
+}
+
+/* ---------- settings sheet ---------- */
+#swm_overlay .swm_set_body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 14px;
+    overflow-y: auto;
+}
+
+#swm_overlay .swm_set_title {
+    margin-top: 6px;
+    font-weight: 600;
+}
+
+#swm_overlay .swm_set_check {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 0;
+    cursor: pointer;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: keep-all;
+}
+
+#swm_overlay .swm_set_check input {
+    flex: 0 0 auto;
+    margin: 3px 0 0;
+}
+
+#swm_overlay .swm_set_profile {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 38px !important;
+    margin: 0 !important;
+    padding: 0 10px !important;
+    border: 1px solid var(--swm-border) !important;
+    border-radius: 8px !important;
+    background-color: var(--swm-softer) !important;
+    color: var(--swm-text) !important;
+    font-size: 16px;
+    box-shadow: none !important;
+}
+
+#swm_overlay .swm_set_note {
+    font-size: 0.82em;
+    opacity: 0.7;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: keep-all;
 }
 
 #swm_overlay .swm_sheet.swm_busy .swm_btn:not(.swm_working) {

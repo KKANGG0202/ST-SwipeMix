@@ -174,13 +174,18 @@ function shownText(para) {
     return showTranslation() && para.tr ? para.tr : para.src;
 }
 
-function pickedText() {
-    return state.picks.map(pick => paraOf(pick).src).join('\n\n');
+/** The text of a picked paragraph: the edited one when it was edited, otherwise the original. */
+function pickText(pick) {
+    return pick.text !== undefined ? pick.text : paraOf(pick).src;
 }
 
-/** The text that will be saved: the hand-edited one when there is one, otherwise the picked paragraphs. */
+function hasEdits() {
+    return state.picks.some(pick => pick.text !== undefined);
+}
+
+/** The text that will be saved. */
 function finalText() {
-    return state.edited !== null ? state.edited : pickedText();
+    return state.picks.map(pick => pickText(pick).trim()).filter(Boolean).join('\n\n');
 }
 
 /** 1-based paragraph numbers where the text switches to a different swipe. */
@@ -203,8 +208,9 @@ function buildOverlay() {
     ui.viewTr = make('span', { class: 'swm_seg_btn', text: '번역' });
     ui.viewSrc = make('span', { class: 'swm_seg_btn', text: '원문' });
     ui.viewSeg = make('div', { class: 'swm_seg', title: '저장된 번역으로 보기 / 원문으로 보기' }, [ui.viewTr, ui.viewSrc]);
+    ui.setBtn = make('div', { class: 'swm_iconbtn', title: '설정', tabindex: '0' }, [icon('fa-gear')]);
     ui.closeBtn = make('div', { class: 'swm_iconbtn', title: '닫기', tabindex: '0' }, [icon('fa-xmark')]);
-    const head = make('div', { class: 'swm_head' }, [icon('fa-puzzle-piece'), ui.title, ui.viewSeg, ui.closeBtn]);
+    const head = make('div', { class: 'swm_head' }, [icon('fa-puzzle-piece'), ui.title, ui.viewSeg, ui.setBtn, ui.closeBtn]);
 
     ui.pager = make('div', { class: 'swm_pager' });
     ui.cols = make('div', { class: 'swm_cols' });
@@ -222,7 +228,7 @@ function buildOverlay() {
     ]);
 
     // edit sheet: lives inside the panel, which has a real size, so it can simply fill it
-    ui.editText = make('textarea', { class: 'swm_edit_text', spellcheck: 'false' });
+    ui.editList = make('div', { class: 'swm_edit_list' });
     ui.editNote = make('input', { class: 'swm_edit_note', type: 'text', placeholder: '부탁할 말 (한글로 써도 돼요). 예: 나간 사람이 다시 앉아 있지 않게' });
     ui.toSourceBtn = make('div', { class: 'swm_btn swm_hidden', tabindex: '0', title: '한글로 쓴 줄만 이야기 원문의 언어와 말투로 바꿔요. 나머지 줄은 그대로예요.' }, [icon('fa-language'), make('span', { text: '한글 줄만 원문 언어로' })]);
     ui.smoothBtn = make('div', { class: 'swm_btn', tabindex: '0', title: '붙인 자리에서 앞뒤가 안 맞는 문장만 최소한으로 고쳐요.' }, [icon('fa-wand-magic-sparkles'), make('span', { text: '이음새 다듬기' })]);
@@ -233,7 +239,7 @@ function buildOverlay() {
     ui.profileName = make('span', { class: 'swm_profile_name' });
     ui.editSheet = make('div', { class: 'swm_sheet swm_hidden' }, [
         make('div', { class: 'swm_head' }, [icon('fa-pen'), make('div', { class: 'swm_title', text: '합친 글 고치기' }), ui.editDone]),
-        ui.editText,
+        ui.editList,
         ui.editInfo,
         make('div', { class: 'swm_ai' }, [
             make('div', { class: 'swm_ai_row' }, [make('span', { class: 'swm_ai_label', text: 'AI로 고치기' }), ui.profileName]),
@@ -242,26 +248,28 @@ function buildOverlay() {
         ]),
     ]);
 
-    ui.panel.append(head, ui.pager, ui.cols, ui.tray, ui.editSheet);
+    buildSettingsSheet();
+    ui.panel.append(head, ui.pager, ui.cols, ui.tray, ui.editSheet, ui.setSheet);
     ui.overlay.append(ui.panel);
     document.body.append(ui.overlay);
 
     ui.closeBtn.addEventListener('click', closePicker);
+    ui.setBtn.addEventListener('click', openSettings);
     ui.viewTr.addEventListener('click', () => setView('tr'));
     ui.viewSrc.addEventListener('click', () => setView('src'));
     ui.clearBtn.addEventListener('click', clearPicks);
     ui.editBtn.addEventListener('click', openEdit);
     ui.saveBtn.addEventListener('click', saveMerged);
     ui.editDone.addEventListener('click', closeEdit);
-    ui.editText.addEventListener('input', onEditInput);
     ui.smoothBtn.addEventListener('click', smoothSeams);
     ui.toSourceBtn.addEventListener('click', koreanLinesToSource);
     ui.undoBtn.addEventListener('click', undoAi);
     ui.resetBtn.addEventListener('click', resetEdit);
     ui.cols.addEventListener('scroll', debounce(markPager, 80), { passive: true });
     document.addEventListener('keydown', (e) => {
-        if (e.key !== 'Escape' || !state) return;
-        if (!ui.editSheet.classList.contains('swm_hidden')) closeEdit();
+        if (e.key !== 'Escape' || ui.overlay.classList.contains('swm_hidden')) return;
+        if (!ui.setSheet.classList.contains('swm_hidden')) closeSettings();
+        else if (!ui.editSheet.classList.contains('swm_hidden')) closeEdit();
         else closePicker();
     });
 }
@@ -288,9 +296,9 @@ function openPicker(mesId) {
         message,
         chatId: c.getCurrentChatId?.(),
         swipes,
-        picks: [],
-        edited: null,
+        picks: [],       // [{ s, p, text? }] text = the paragraph as edited in the edit sheet
         undo: null,
+        changed: new Set(),
         busy: false,
     };
     ui.title.textContent = `스와이프 합치기 · #${mesId}`;
@@ -299,6 +307,7 @@ function openPicker(mesId) {
     drawColumns();
     drawTray();
     ui.editSheet.classList.add('swm_hidden');
+    ui.setSheet.classList.add('swm_hidden');
     ui.overlay.classList.remove('swm_hidden');
     // start on the swipe that is on screen
     const currentCol = ui.cols.querySelector('.swm_col.swm_current');
@@ -309,7 +318,7 @@ function openPicker(mesId) {
 async function closePicker() {
     if (!state) return;
     if (state.busy) return;
-    if (state.picks.length || state.edited !== null) {
+    if (state.picks.length) {
         const ok = await ctx().Popup.show.confirm('스와이프 합치기', '고른 문단을 저장하지 않고 닫을까요?');
         if (!ok) return;
     }
@@ -409,11 +418,6 @@ function markPager() {
 
 function addPick(s, p, quiet = false) {
     state.picks.push({ s, p });
-    // a hand-edited text keeps its edits: the new paragraph is added to its end
-    if (state.edited !== null) {
-        const add = paraOf({ s, p }).src;
-        state.edited = state.edited.trim() ? `${state.edited.replace(/\s+$/, '')}\n\n${add}` : add;
-    }
     if (!quiet) afterPicksChanged();
 }
 
@@ -424,35 +428,27 @@ async function togglePick(s, p) {
         addPick(s, p);
         return;
     }
-    if (!(await dropEditsIfAny())) return;
+    if (state.picks[at].text !== undefined) {
+        const ok = await ctx().Popup.show.confirm('스와이프 합치기', '직접 고친 문단이에요. 빼면 고친 내용도 사라져요. 뺄까요?');
+        if (!ok) return;
+    }
     state.picks.splice(at, 1);
     afterPicksChanged();
 }
 
-/** Removing or moving paragraphs cannot be applied to a hand-edited text, so the edits go first (after asking). */
-async function dropEditsIfAny() {
-    if (state.edited === null) return true;
-    const ok = await ctx().Popup.show.confirm('스와이프 합치기', '직접 고친 내용이 있어요. 문단을 빼거나 순서를 바꾸면 고친 내용은 사라져요. 계속할까요?');
-    if (!ok) return false;
-    state.edited = null;
-    state.undo = null;
-    return true;
-}
-
 async function clearPicks() {
-    if (!state.picks.length && state.edited === null) return;
-    const ok = await ctx().Popup.show.confirm('스와이프 합치기', '담은 문단을 전부 비울까요?');
+    if (!state.picks.length) return;
+    const ok = await ctx().Popup.show.confirm('스와이프 합치기', hasEdits() ? '담은 문단을 전부 비울까요? 고친 내용도 사라져요.' : '담은 문단을 전부 비울까요?');
     if (!ok) return;
     state.picks = [];
-    state.edited = null;
     state.undo = null;
     afterPicksChanged();
 }
 
-async function movePick(at, by) {
+/** Edits travel with their paragraph, so moving one keeps them. */
+function movePick(at, by) {
     const to = at + by;
     if (to < 0 || to >= state.picks.length) return;
-    if (!(await dropEditsIfAny())) return;
     [state.picks[at], state.picks[to]] = [state.picks[to], state.picks[at]];
     afterPicksChanged();
 }
@@ -465,10 +461,10 @@ function afterPicksChanged() {
 function drawTray() {
     const n = state.picks.length;
     ui.trayCount.textContent = n ? `합친 글 · ${n}문단` : '합친 글';
-    const empty = !n && state.edited === null;
-    for (const btn of [ui.clearBtn, ui.editBtn, ui.saveBtn]) btn.classList.toggle('swm_dim', empty);
-    ui.trayNote.classList.toggle('swm_hidden', state.edited === null);
-    ui.trayNote.textContent = state.edited !== null ? '직접 고친 글로 저장돼요. 문단을 더 담으면 고친 글 끝에 붙어요.' : '';
+    for (const btn of [ui.clearBtn, ui.editBtn, ui.saveBtn]) btn.classList.toggle('swm_dim', !n);
+    const edits = state.picks.filter(pick => pick.text !== undefined).length;
+    ui.trayNote.classList.toggle('swm_hidden', !edits);
+    ui.trayNote.textContent = edits ? `고친 문단이 ${edits}개 있어요. 고친 대로 저장돼요.` : '';
     ui.trayList.replaceChildren();
     if (!n) {
         ui.trayList.append(make('div', { class: 'swm_empty', text: '위에서 문단을 탭하면 순서대로 여기에 담겨요.' }));
@@ -483,24 +479,29 @@ function drawTray() {
         up.addEventListener('click', () => movePick(at, -1));
         down.addEventListener('click', () => movePick(at, 1));
         del.addEventListener('click', () => togglePick(pick.s, pick.p));
-        ui.trayList.append(make('div', { class: 'swm_tray_row' + (seam ? ' swm_seam' : '') }, [
+        const edited = pick.text !== undefined;
+        ui.trayList.append(make('div', { class: 'swm_tray_row' + (seam ? ' swm_seam' : '') + (edited ? ' swm_edited' : '') }, [
             make('span', { class: 'swm_tray_from', text: `${pick.s + 1}`, title: `스와이프 ${pick.s + 1}` }),
-            make('span', { class: 'swm_tray_text', text: shownText(para).replace(/\s+/g, ' ') }),
+            // an edited paragraph shows what it says now; its stored translation no longer matches
+            make('span', { class: 'swm_tray_text', text: (edited ? pick.text : shownText(para)).replace(/\s+/g, ' ') }),
             up, down, del,
         ]));
     });
 }
 
 // ---------------------------------------------------------------- edit sheet
+// One block per picked paragraph: its stored translation (when there is one) to read, and under it the
+// original text to edit. Only the original text is saved.
 
 function openEdit() {
-    if (!state.picks.length && state.edited === null) return;
-    ui.editText.value = finalText();
+    if (!state.picks.length) return;
     ui.editNote.value = '';
     ui.editInfo.textContent = '';
+    state.undo = null;
+    state.changed = new Set();
     showProfileName();
-    refreshEditButtons();
     ui.editSheet.classList.remove('swm_hidden');
+    redrawEdit();
 }
 
 function closeEdit() {
@@ -509,35 +510,99 @@ function closeEdit() {
     if (state) drawTray();
 }
 
-function onEditInput() {
-    const value = ui.editText.value;
-    state.edited = value === pickedText() ? null : value;
+function fitHeight(area) {
+    area.style.height = 'auto';
+    area.style.height = `${area.scrollHeight + 2}px`;
+}
+
+function redrawEdit() {
+    drawEditList();
+    ui.editList.querySelectorAll('textarea').forEach(fitHeight);
     refreshEditButtons();
 }
 
+function drawEditList() {
+    ui.editList.replaceChildren();
+    state.picks.forEach((pick, at) => {
+        const para = paraOf(pick);
+        const seam = at > 0 && state.picks[at - 1].s !== pick.s;
+        const area = make('textarea', { class: 'swm_edit_area', rows: '2', spellcheck: 'false' });
+        area.value = pickText(pick);
+        const mark = make('span', { class: 'swm_edit_mark' });
+        const refLabel = make('span', { class: 'swm_edit_ref_label' });
+        const ref = para.tr ? make('div', { class: 'swm_edit_ref' }, [refLabel, make('span', { text: para.tr })]) : null;
+        const block = make('div', { class: 'swm_edit_block' + (seam ? ' swm_seam' : '') }, [
+            make('div', { class: 'swm_edit_from' }, [
+                make('span', { class: 'swm_tray_from', text: String(pick.s + 1), title: `스와이프 ${pick.s + 1}` }),
+                make('span', { text: seam ? `${at + 1}번째 문단 · 여기서 스와이프가 바뀌어요` : `${at + 1}번째 문단` }),
+                mark,
+            ]),
+            ...(ref ? [ref] : []),
+            area,
+        ]);
+        const refresh = () => {
+            const edited = pick.text !== undefined;
+            const byAi = state.changed.has(pick);
+            block.classList.toggle('swm_edited', edited);
+            block.classList.toggle('swm_ai', byAi);
+            mark.textContent = byAi ? 'AI가 고침' : edited ? '고침' : '';
+            // the stored translation belongs to the text as it was before the edit
+            refLabel.textContent = edited ? '고치기 전 번역 · ' : '';
+        };
+        area.addEventListener('input', () => {
+            if (area.value === para.src) delete pick.text;
+            else pick.text = area.value;
+            state.changed.delete(pick);
+            fitHeight(area);
+            refresh();
+            refreshEditButtons();
+        });
+        refresh();
+        ui.editList.append(block);
+    });
+}
+
 function refreshEditButtons() {
-    const lines = ui.editText.value.split('\n').filter(l => l.trim());
+    const lines = state.picks.flatMap(pick => pickText(pick).split('\n')).filter(l => l.trim());
     const korean = lines.filter(hasHangul).length;
     // only for a story that is not written in Korean: a few Korean lines among lines in another language
     ui.toSourceBtn.classList.toggle('swm_hidden', !(korean > 0 && korean < lines.length / 2));
     ui.undoBtn.classList.toggle('swm_hidden', state.undo === null);
-    ui.resetBtn.classList.toggle('swm_dim', state.edited === null);
+    ui.resetBtn.classList.toggle('swm_dim', !hasEdits());
+}
+
+/** The edits of every picked paragraph, in order (undefined = not edited). */
+function snapshotEdits() {
+    return state.picks.map(pick => pick.text);
+}
+
+function restoreEdits(snap) {
+    state.picks.forEach((pick, i) => {
+        if (snap[i] === undefined) delete pick.text;
+        else pick.text = snap[i];
+    });
+}
+
+function setPickText(pick, text) {
+    if (text === paraOf(pick).src) delete pick.text;
+    else pick.text = text;
 }
 
 function resetEdit() {
-    if (state.busy || state.edited === null) return;
-    state.undo = ui.editText.value;
-    ui.editText.value = pickedText();
-    state.edited = null;
+    if (state.busy || !hasEdits()) return;
+    state.undo = snapshotEdits();
+    state.picks.forEach((pick) => { delete pick.text; });
+    state.changed.clear();
+    redrawEdit();
     ui.editInfo.textContent = '고른 문단 그대로 되돌렸어요.';
-    refreshEditButtons();
 }
 
 function undoAi() {
     if (state.busy || state.undo === null) return;
-    ui.editText.value = state.undo;
+    restoreEdits(state.undo);
     state.undo = null;
-    onEditInput();
+    state.changed.clear();
+    redrawEdit();
     ui.editInfo.textContent = '되돌렸어요.';
 }
 
@@ -545,7 +610,7 @@ function undoAi() {
 function showProfileName() {
     let name = '';
     try { name = ctx().ConnectionManagerRequestService?.getSupportedProfiles?.().find(p => p.id === settings().profileId)?.name ?? ''; } catch { name = ''; }
-    ui.profileName.textContent = name ? `연결 프로필: ${name}` : '확장 설정의 Swipe Mix에서 연결 프로필을 먼저 골라 주세요.';
+    ui.profileName.textContent = name ? `연결 프로필: ${name}` : '설정(창 위쪽 톱니바퀴)에서 연결 프로필을 먼저 골라 주세요.';
     ui.profileName.classList.toggle('swm_warn', !name);
 }
 
@@ -561,7 +626,7 @@ function fillProfiles(select) {
     }
 }
 
-// ---------------------------------------------------------------- settings (Extensions panel)
+// ---------------------------------------------------------------- settings (a sheet inside the picker)
 
 /** Which of the two buttons show is set by classes on <body>, so switching costs nothing per message. */
 function applyButtonSettings() {
@@ -570,58 +635,80 @@ function applyButtonSettings() {
     document.body.classList.toggle('swm_no_near', !s.nearButton);
 }
 
-function buildSettings() {
-    const host = document.getElementById('extensions_settings2') || document.getElementById('extensions_settings');
-    if (!host || document.getElementById('swm_settings')) return;
-    const s = settings();
+function buildSettingsSheet() {
     const check = (key, label, other) => {
         const box = make('input', { type: 'checkbox' });
-        box.checked = !!s[key];
         box.addEventListener('change', () => {
             // one way in always stays
             if (!box.checked && !settings()[other]) {
                 box.checked = true;
-                toastr.info('버튼을 둘 다 끄면 열 방법이 없어서 하나는 켜 둬야 해요.', 'Swipe Mix');
+                toastr.info('버튼을 둘 다 끄면 열 방법이 없어서 하나는 켜 둬야 해요.', '스와이프 합치기');
                 return;
             }
             settings()[key] = box.checked;
             save();
             applyButtonSettings();
         });
-        return make('label', { class: 'checkbox_label' }, [box, make('span', { text: label })]);
+        ui.setChecks[key] = box;
+        return make('label', { class: 'swm_set_check' }, [box, make('span', { text: label })]);
     };
-    const profile = make('select', { class: 'text_pole', id: 'swm_set_profile' });
-    fillProfiles(profile);
-    // profiles can be added or renamed at any time: read them again when the list is about to open
-    for (const type of ['pointerdown', 'focus']) profile.addEventListener(type, () => fillProfiles(profile));
-    profile.addEventListener('change', () => {
-        settings().profileId = profile.value;
+    ui.setChecks = {};
+    ui.setProfile = make('select', { class: 'swm_set_profile' });
+    ui.setProfile.addEventListener('change', () => {
+        settings().profileId = ui.setProfile.value;
         save();
+        showProfileName();
     });
-    const content = make('div', { class: 'inline-drawer-content' }, [
-        make('b', { text: '퍼즐 버튼 위치' }),
-        check('menuButton', '메시지 메뉴(…) 안에 보이기', 'nearButton'),
-        check('nearButton', '맨 아래 답변의 스와이프 번호 옆에 보이기 (스와이프가 2개 이상일 때)', 'menuButton'),
-        make('label', { for: 'swm_set_profile', text: 'AI로 고치기에 쓸 연결 프로필' }),
-        profile,
-        make('small', { text: '"이음새 다듬기"와 "한글 줄만 원문 언어로"를 누를 때만 이 프로필로 요청을 보내요.' }),
-    ]);
-    host.append(make('div', { id: 'swm_settings' }, [
-        make('div', { class: 'inline-drawer' }, [
-            make('div', { class: 'inline-drawer-toggle inline-drawer-header' }, [
-                make('b', { text: 'Swipe Mix (스와이프 합치기)' }),
-                make('div', { class: 'inline-drawer-icon fa-solid fa-circle-chevron-down down' }),
-            ]),
-            content,
+    ui.setDone = make('div', { class: 'swm_btn swm_primary', tabindex: '0' }, [icon('fa-check'), make('span', { text: '완료' })]);
+    ui.setDone.addEventListener('click', closeSettings);
+    ui.setSheet = make('div', { class: 'swm_sheet swm_hidden' }, [
+        make('div', { class: 'swm_head' }, [icon('fa-gear'), make('div', { class: 'swm_title', text: '스와이프 합치기 설정' }), ui.setDone]),
+        make('div', { class: 'swm_set_body' }, [
+            make('div', { class: 'swm_set_title', text: '퍼즐 버튼 위치' }),
+            check('menuButton', '메시지 메뉴(…) 안에 보이기', 'nearButton'),
+            check('nearButton', '맨 아래 답변의 스와이프 번호 옆에 보이기 (스와이프가 2개 이상일 때)', 'menuButton'),
+            make('div', { class: 'swm_set_title', text: 'AI로 고치기에 쓸 연결 프로필' }),
+            ui.setProfile,
+            make('div', { class: 'swm_set_note', text: '"이음새 다듬기"와 "한글 줄만 원문 언어로"를 누를 때만 이 프로필로 요청을 보내요.' }),
+            make('div', { class: 'swm_set_note', text: '이 설정 창은 /swipemix 명령으로도 열 수 있어요.' }),
         ]),
-    ]));
+    ]);
+}
+
+/** Opens the settings sheet. Without a picker open (slash command) the window shows the sheet alone. */
+function openSettings() {
+    if (state?.busy) return;
+    const s = settings();
+    for (const [key, box] of Object.entries(ui.setChecks)) box.checked = !!s[key];
+    fillProfiles(ui.setProfile);
+    ui.setSheet.classList.remove('swm_hidden');
+    ui.overlay.classList.remove('swm_hidden');
+}
+
+function closeSettings() {
+    ui.setSheet.classList.add('swm_hidden');
+    if (!state) ui.overlay.classList.add('swm_hidden');
+}
+
+function registerCommand() {
+    const { SlashCommandParser, SlashCommand } = ctx();
+    if (!SlashCommandParser?.addCommandObject || !SlashCommand?.fromProps) return;
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'swipemix',
+        callback: () => {
+            openSettings();
+            return '';
+        },
+        returns: 'nothing',
+        helpString: '<div>Swipe Mix(스와이프 합치기) 설정 창을 열어요.</div>',
+    }));
 }
 
 function setBusy(on, btn) {
     state.busy = on;
     ui.editSheet.classList.toggle('swm_busy', on);
     btn?.classList.toggle('swm_working', on);
-    ui.editText.readOnly = on;
+    ui.editList.querySelectorAll('textarea').forEach((area) => { area.readOnly = on; });
 }
 
 /** Sends one request through the chosen connection profile and returns the reply text. */
@@ -650,7 +737,7 @@ function parseStringArray(raw, count) {
 }
 
 function aiErrorText(error) {
-    if (error?.message === 'NO_PROFILE') return 'AI로 고치려면 확장 설정의 Swipe Mix에서 연결 프로필을 먼저 골라 주세요.';
+    if (error?.message === 'NO_PROFILE') return 'AI로 고치려면 설정(창 위쪽 톱니바퀴)에서 연결 프로필을 먼저 골라 주세요.';
     if (error?.message === 'BAD_REPLY') return '답을 읽지 못했어요. 글은 그대로예요. 다시 시도해 주세요.';
     return `고치지 못했어요. 글은 그대로예요.${error?.message ? ` (${String(error.message).slice(0, 120)})` : ''}`;
 }
@@ -658,14 +745,13 @@ function aiErrorText(error) {
 /** Fixes only what does not fit at the joins between paragraphs taken from different swipes. */
 async function smoothSeams() {
     if (state.busy) return;
-    const before = ui.editText.value;
-    const paragraphs = splitParagraphs(before);
+    const paragraphs = state.picks.map(pickText);
     if (paragraphs.length < 2) {
         ui.editInfo.textContent = '문단이 2개 이상일 때 쓸 수 있어요.';
         return;
     }
-    // the join positions are only known while the text still has the picked paragraphs, one for one
-    const seams = paragraphs.length === state.picks.length ? seamNumbers() : [];
+    const before = snapshotEdits();
+    const seams = seamNumbers();
     const note = ui.editNote.value.trim();
     const system = 'You are a careful fiction editor. You repair continuity in a passage that was assembled from paragraphs of several alternative drafts of the same scene.';
     const user = `The paragraphs in the JSON array below were taken from different drafts of the same scene and joined in this order.
@@ -675,23 +761,25 @@ Rules:
 - Keep every other sentence exactly as written, character for character.
 - Keep the original language, narrative voice, tense, formatting, markdown, quotation style, and macros such as {{user}} and {{char}}.
 - Do not add new events, do not summarize, and do not merge, split, drop or reorder paragraphs.
-- ${seams.length ? `Joins: paragraph number(s) ${seams.join(', ')} (counting from 1) each start a part taken from a different draft than the paragraph before.` : 'The join positions are not known: check every paragraph boundary.'}
+- ${seams.length ? `Joins: paragraph number(s) ${seams.join(', ')} (counting from 1) each start a part taken from a different draft than the paragraph before.` : 'All paragraphs come from the same draft, so there may be nothing to fix apart from what the user asks for.'}
 ${note ? `- The user asks for this in particular (the request may be written in Korean; follow it, but write the story text in the story's own language): ${note}\n` : ''}- Reply with a JSON array of strings only: exactly ${paragraphs.length} items, one per paragraph, in the same order.
 
 ${JSON.stringify(paragraphs)}`;
     setBusy(true, ui.smoothBtn);
     ui.editInfo.textContent = '이음새를 다듬는 중…';
     try {
-        const out = parseStringArray(await askModel(system, user, before.length), paragraphs.length);
-        const changed = out.map((text, i) => (text.trim() !== paragraphs[i].trim() ? i + 1 : 0)).filter(Boolean);
-        if (ui.editText.value !== before) throw new Error('BAD_REPLY');
+        const out = parseStringArray(await askModel(system, user, paragraphs.join('').length), paragraphs.length);
+        const changed = out.map((text, i) => (text.trim() !== paragraphs[i].trim() ? i : -1)).filter(i => i >= 0);
         if (!changed.length) {
             ui.editInfo.textContent = '고칠 곳을 찾지 못했어요. 글은 그대로예요.';
         } else {
             state.undo = before;
-            ui.editText.value = out.map(x => x.trim()).join('\n\n');
-            onEditInput();
-            ui.editInfo.textContent = `${changed.join(', ')}번째 문단을 고쳤어요. 마음에 안 들면 되돌리기를 눌러요.`;
+            for (const i of changed) {
+                setPickText(state.picks[i], out[i].trim());
+                state.changed.add(state.picks[i]);
+            }
+            redrawEdit();
+            ui.editInfo.textContent = `${changed.map(i => i + 1).join(', ')}번째 문단을 고쳤어요. 마음에 안 들면 되돌리기를 눌러요.`;
         }
     } catch (error) {
         console.warn('[SwipeMix] Seam fix failed', error);
@@ -704,34 +792,37 @@ ${JSON.stringify(paragraphs)}`;
 /** Rewrites only the lines typed in Korean into the language and voice of the rest of the text. */
 async function koreanLinesToSource() {
     if (state.busy) return;
-    const before = ui.editText.value;
-    const lines = before.split('\n');
-    const idx = lines.map((l, i) => (hasHangul(l) ? i : -1)).filter(i => i >= 0);
-    if (!idx.length) return;
-    const context = lines.filter(l => l.trim() && !hasHangul(l)).join('\n').slice(0, 6000);
+    const blocks = state.picks.map(pick => pickText(pick).split('\n'));
+    const spots = [];
+    blocks.forEach((lines, b) => lines.forEach((line, l) => { if (hasHangul(line)) spots.push([b, l]); }));
+    if (!spots.length) return;
+    const before = snapshotEdits();
+    const context = blocks.flat().filter(l => l.trim() && !hasHangul(l)).join('\n').slice(0, 6000);
     const system = 'You are a translator for roleplay and fiction. You translate faithfully and naturally, matching the voice of the surrounding text.';
     const user = `Each item of the JSON array below is a line written in Korean that belongs inside the story text shown under "Story text".
 Rewrite each item in the language of the story text, matching its narrative voice, person, tense and quotation style.
 Rules:
 - Keep macros such as {{user}} and {{char}}, names, markdown and punctuation style.
 - Do not add, drop, explain or merge anything.
-- Reply with a JSON array of strings only: exactly ${idx.length} item(s), in the same order.
+- Reply with a JSON array of strings only: exactly ${spots.length} item(s), in the same order.
 
 Story text (for reference only, do not repeat it):
 ${context}
 
 Lines to rewrite:
-${JSON.stringify(idx.map(i => lines[i]))}`;
+${JSON.stringify(spots.map(([b, l]) => blocks[b][l]))}`;
     setBusy(true, ui.toSourceBtn);
     ui.editInfo.textContent = '한글 줄을 바꾸는 중…';
     try {
-        const out = parseStringArray(await askModel(system, user, idx.reduce((n, i) => n + lines[i].length, 0) * 3), idx.length);
-        if (ui.editText.value !== before) throw new Error('BAD_REPLY');
-        idx.forEach((lineNo, k) => { lines[lineNo] = out[k]; });
+        const out = parseStringArray(await askModel(system, user, spots.reduce((n, [b, l]) => n + blocks[b][l].length, 0) * 3), spots.length);
         state.undo = before;
-        ui.editText.value = lines.join('\n');
-        onEditInput();
-        ui.editInfo.textContent = `한글 ${idx.length}줄을 바꿨어요. 마음에 안 들면 되돌리기를 눌러요.`;
+        spots.forEach(([b, l], k) => { blocks[b][l] = out[k]; });
+        for (const b of new Set(spots.map(([x]) => x))) {
+            setPickText(state.picks[b], blocks[b].join('\n'));
+            state.changed.add(state.picks[b]);
+        }
+        redrawEdit();
+        ui.editInfo.textContent = `한글 ${spots.length}줄을 바꿨어요. 마음에 안 들면 되돌리기를 눌러요.`;
     } catch (error) {
         console.warn('[SwipeMix] Line rewrite failed', error);
         ui.editInfo.textContent = aiErrorText(error);
@@ -747,7 +838,7 @@ ${JSON.stringify(idx.map(i => lines[i]))}`;
  * Reused only when the text is exactly the picked paragraphs and each of them has a translation.
  */
 function translationForNewSwipe() {
-    if (state.edited !== null || !state.picks.length) return '';
+    if (hasEdits() || !state.picks.length) return '';
     if (hasManagedTranslation(state.message)) return '';
     const parts = state.picks.map(pick => paraOf(pick).tr);
     return parts.every(Boolean) ? parts.join('\n\n') : '';
@@ -857,7 +948,7 @@ const refreshNearSoon = debounce(refreshNear, 150);
 function init() {
     buildOverlay();
     applyButtonSettings();
-    buildSettings();
+    registerCommand();
     // new messages are cloned from the template, the ones already on screen get the button directly
     addButtons(document.getElementById('message_template'));
     addButtons(document.getElementById('chat'));
@@ -872,10 +963,9 @@ function init() {
     eventSource.on(event_types.CHAT_CHANGED, () => {
         if (!state) return;
         ui.overlay.classList.add('swm_hidden');
+        ui.setSheet.classList.add('swm_hidden');
         state = null;
     });
-    // the Extensions panel may not be there yet while extensions load
-    if (event_types.APP_READY) eventSource.on(event_types.APP_READY, buildSettings);
     for (const name of ['APP_READY', 'CHAT_CHANGED', 'MESSAGE_SWIPED', 'CHARACTER_MESSAGE_RENDERED', 'MESSAGE_UPDATED', 'MESSAGE_DELETED', 'MESSAGE_SWIPE_DELETED', 'GENERATION_ENDED']) {
         if (event_types[name]) eventSource.on(event_types[name], refreshNearSoon);
     }
