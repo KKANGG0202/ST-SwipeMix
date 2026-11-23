@@ -385,6 +385,20 @@ body.swm_no_near .swm_near {
     background: var(--swm-bg);
 }
 
+/* wide screens: a centred box instead of a sheet attached to the bottom edge */
+@media (min-width: 769px) {
+    #swm_overlay .swm_range {
+        align-items: center;
+    }
+
+    #swm_overlay .swm_range_box {
+        width: min(420px, 90%);
+        border-bottom: 1px solid var(--swm-border);
+        border-radius: 14px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+    }
+}
+
 #swm_overlay .swm_range_title {
     font-weight: 600;
 }
