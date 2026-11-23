@@ -32,7 +32,8 @@ body.swm_no_near .swm_near {
     margin-right: 4px;
     font-size: 18px;
     opacity: 0.5;
-    z-index: 9999;
+    /* above the message text only: it must stay under the picker window and every popup */
+    z-index: 1;
 }
 
 #chat .mes.last_mes.swm_multi .swipeRightBlock > .swm_near:hover,
